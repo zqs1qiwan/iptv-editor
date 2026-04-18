@@ -1,50 +1,50 @@
-# iptv-editor (pinyin-worker)
+# iptv-editor
 
-M3U/M3U8 播放列表编辑工具 — 基于 Cloudflare Workers，自动为 IPTV 频道生成拼音 Logo URL 并管理 tvg-id。
+M3U 播放列表标准化工具。自动匹配频道名称，标准化 `tvg-id`、`tvg-name`、`tvg-logo` 属性。
 
 ## 功能
 
-- **tvg-logo 标准化**：根据频道名自动生成拼音缩写，替换为 `https://logo.laobaitv.net/{拼音}` 格式
-- **tvg-id 管理**：三种模式 — 清空 / 保留原有 / 继承频道名 (tvg-name)
-- **特殊拼音规则**：支持自定义映射（如 湖北→hub、河北→heb、山西→shanx、陕西→shannx 等消歧义）
-- **Web UI**：拖拽上传 M3U 文件，选择处理选项，在线下载处理结果
+- **频道智能匹配**：根据 [LaobaiEPG](https://epg.laobaitv.net) 频道数据库自动匹配频道名
+- **tvg-id 标准化**：使用标准频道名（去掉 4K/HD 等画质后缀）作为 tvg-id
+- **tvg-name 标准化**：使用完整标准频道名（含画质后缀）作为 tvg-name
+- **tvg-logo 标准化**：根据 tvg-name 的全拼音生成 logo URL（`https://logo.laobaitv.net/<拼音>`）
+- **保留原始显示名**：输出 M3U 中频道显示名称（逗号后）保持原始不变
 
-## 技术架构
+## 匹配算法
 
-```
-Cloudflare Worker (JavaScript + pinyin-pro)
-├── GET  /     → HTML 上传界面
-└── POST /     → 处理 M3U 内容，返回处理后的文件
-                 ├── Header: X-TvgId-Option (clear|keep|from-name)
-                 └── Body: 原始 M3U 文本
-```
+匹配时先去掉画质标识（4K/HD/超清等），再按以下优先级匹配：
 
-### 依赖
+1. **精确匹配** — 直接命中频道名、ID 或别名
+2. **归一化匹配** — 去空格、统一大小写、全角转半角后比较
+3. **繁简转换** — 繁体转简体后重新匹配
+4. **CCTV 正则** — `CCTV-1`、`CCTV 1`、`cctv1综合` 等变体自动归一化
+5. **模糊匹配** — 去掉尾部字母数字后匹配（如 `浙江卫视HD` → `浙江卫视`）
 
-| 包名 | 用途 |
-|------|------|
-| `pinyin-pro` | 中文转拼音首字母 |
+## 4K/HD 处理规则
 
-### 绑定资源
+| 输入频道名 | tvg-id | tvg-name | tvg-logo |
+|-----------|--------|----------|----------|
+| 湖南卫视 4K | 湖南卫视 | 湖南卫视4K | `logo.laobaitv.net/hunanweishi4k` |
+| CCTV-1 | CCTV1 | CCTV1 | `logo.laobaitv.net/cctv1` |
 
-无外部绑定（纯计算型 Worker）。
+## 拼音转换规则
 
-## 部署
+- 中文字符 → 全拼音小写，无声调无空格
+- 字母数字 → 原样保留（转小写）
+- 连字符/空格 → 去除
+
+示例：`湖南卫视` → `hunanweishi`，`CCTV-1` → `cctv1`，`湖南卫视4K` → `hunanweishi4k`
+
+## 开发
 
 ```bash
 npm install
-wrangler deploy
+npm run dev     # 本地开发
+npm run deploy  # 部署到 Cloudflare Workers
 ```
 
-## 配置
+## 技术栈
 
-- `wrangler.jsonc` 中 Worker 名称为 `iptv-editor`
-- 特殊拼音映射在 `src/index.js` 顶部的 `specialMappings` 对象中维护
-
-## 处理逻辑
-
-1. 遍历 M3U 的 `#EXTINF` 行
-2. 提取 `tvg-name` 属性值
-3. 按选项处理 `tvg-id`（清空/保留/继承）
-4. 对频道名进行拼音转换：特殊规则优先 → 占位符替换 → pinyin-pro 取首字母 → 还原占位符
-5. 生成新的 `tvg-logo` URL
+- Cloudflare Workers
+- [pinyin-pro](https://github.com/zh-lx/pinyin-pro) — 拼音转换
+- [LaobaiEPG API](https://api.laobaitv.net/channels.json) — 频道数据源
