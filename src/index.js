@@ -4,7 +4,7 @@ import { pinyin } from 'pinyin-pro';
 // 频道 API
 // ============================================================
 
-const CHANNELS_API = 'https://api.laobaitv.net/channels.json';
+const CHANNELS_API = 'https://laobaiepg.laobaitv.net/channels.json';
 const LOGO_BASE = 'https://logo.laobaitv.net/';
 
 // 缓存频道数据 (Worker 实例级别)
