@@ -332,10 +332,10 @@ function rebuildInfoLine(tvgId, tvgName, tvgLogo, groupTitle, displayName) {
 }
 
 /**
- * Logo URL 生成：先去空格再 encodeURIComponent（避免 %20）
+ * Logo URL 生成：去空格后直接拼中文路径（logo 服务支持中文 URL）
  */
 function buildLogoUrl(name) {
-  return LOGO_BASE + encodeURIComponent(name.replace(/\s+/g, ''));
+  return LOGO_BASE + name.replace(/\s+/g, '');
 }
 
 /**
@@ -408,7 +408,7 @@ function processM3U(content, aliasIndex) {
         : channel.name;
       // tvg-id 用 EPG 标准 id
       const tvgId = channel.id;
-      // logo：先去空格再 encode（避免 %20）
+      // logo：去空格后直接拼中文路径
       const logo = buildLogoUrl(standardName);
       // 标准化 group-title：取第一级，按 EPG group+region 重写
       const groupTitle = resolveGroupTitle(channel);
