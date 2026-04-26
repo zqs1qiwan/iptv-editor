@@ -435,12 +435,14 @@ function processM3U(content, aliasIndex) {
       unmatched++;
       unmatchedList.push(nameToMatch);
       // 匹配失败也做标准化：用显示名（去画质后缀）构建规范属性
-      const unmatchedName = baseName; // 去画质后缀的显示名
-      const unmatchedLogo = buildLogoUrl(unmatchedName);
+      const unmatchedName = baseName; // 去画质后缀的显示名，用于 tvg-name 和显示
+      // tvg-id 和 logo slug：去掉连字符和空格（如 CCTV-风云音乐 → CCTV风云音乐）
+      const unmatchedId = unmatchedName.replace(/[\-\s]+/g, '');
+      const unmatchedLogo = buildLogoUrl(unmatchedId);
       // group-title：保留原有 group-title 第一级（分号前），不做 EPG 重写
       const origGroupMatch = entry.info.match(/group-title="([^"]*)"/);
       const origGroup = origGroupMatch ? origGroupMatch[1].split(';')[0].trim() : '';
-      const newInfo = rebuildInfoLine(unmatchedName, unmatchedName, unmatchedLogo, origGroup, displayName);
+      const newInfo = rebuildInfoLine(unmatchedId, unmatchedName, unmatchedLogo, origGroup, displayName);
       processedEntries.push({ ...entry, info: newInfo });
     }
   }
