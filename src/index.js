@@ -408,9 +408,11 @@ function processM3U(content, aliasIndex) {
         : channel.name;
       // tvg-id 用 EPG 标准 id
       const tvgId = channel.id;
-      // logo：优先用 channels.json 的 logo_url（P0 输出），fallback 到自己构建
+      // logo：始终用 standardName 构建，保留 4K 等画质后缀信息
+      // 不使用 channel.logo_url（只有基础名，会导致4K logo退化）
+      // logo 服务有变体回退：有4K专属logo用4K，没有自动回退基础版
       const logoSlug = /^cctv/i.test(channel.id) ? channel.id : standardName;
-      const logo = channel.logo_url || buildLogoUrl(logoSlug);
+      const logo = buildLogoUrl(logoSlug);
       // 标准化 group-title：取第一级，按 EPG group+region 重写
       const groupTitle = resolveGroupTitle(channel);
 
