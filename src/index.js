@@ -408,9 +408,9 @@ function processM3U(content, aliasIndex) {
         : channel.name;
       // tvg-id 用 EPG 标准 id
       const tvgId = channel.id;
-      // logo：CCTV 系列用 channel.id（如 CCTV1），其他用 standardName
+      // logo：优先用 channels.json 的 logo_url（P0 输出），fallback 到自己构建
       const logoSlug = /^cctv/i.test(channel.id) ? channel.id : standardName;
-      const logo = buildLogoUrl(logoSlug);
+      const logo = channel.logo_url || buildLogoUrl(logoSlug);
       // 标准化 group-title：取第一级，按 EPG group+region 重写
       const groupTitle = resolveGroupTitle(channel);
 
