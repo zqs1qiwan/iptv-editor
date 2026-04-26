@@ -347,7 +347,7 @@ function rebuildInfoLine(tvgId, tvgName, tvgLogo, groupTitle, displayName) {
  * Logo URL 生成：去空格后直接拼中文路径（logo 服务支持中文 URL）
  */
 function buildLogoUrl(name) {
-  return LOGO_BASE + name.replace(/\s+/g, '');
+  return LOGO_BASE + name.replace(/[-\s]+/g, '');
 }
 
 /**
@@ -418,12 +418,14 @@ function processM3U(content, aliasIndex) {
       const standardName = (qualitySuffix && !nameAlreadyHasQuality)
         ? channel.name + qualitySuffix
         : channel.name;
-      // tvg-id 用 EPG 标准 id
-      const tvgId = channel.id;
+      // tvg-id 用 EPG 标准 id，去掉连字符和空格
+      const tvgId = channel.id.replace(/[-\s]+/g, '');
       // logo：始终用 standardName 构建，保留 4K 等画质后缀信息
       // 不使用 channel.logo_url（只有基础名，会导致4K logo退化）
       // logo 服务有变体回退：有4K专属logo用4K，没有自动回退基础版
-      const logoSlug = /^cctv/i.test(channel.id) ? channel.id : standardName;
+      const logoSlug = /^cctv/i.test(channel.id)
+        ? channel.id.replace(/[-\s]+/g, '')
+        : standardName;
       const logo = buildLogoUrl(logoSlug);
       // 标准化 group-title：取第一级，按 EPG group+region 重写
       const groupTitle = resolveGroupTitle(channel);
