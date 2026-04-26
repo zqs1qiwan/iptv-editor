@@ -73,7 +73,8 @@ function t2s(str) {
 // 画质标识处理
 // ============================================================
 
-const QUALITY_SUFFIXES = /[^\w]*(4k|8k|hd|uhd|高清|标清|超清|蓝光|hdr|\[hdr\])$/gi;
+// [^\w] 不匹配中文，改用 [\s\-_]* 只去掉分隔符，不误吞汉字
+const QUALITY_SUFFIXES = /[\s\-_]*(4k|8k|hd|uhd|高清|标清|超清|蓝光|hdr|\[hdr\])$/gi;
 
 /**
  * 去除画质标识后缀
@@ -238,11 +239,16 @@ function toPinyinSlug(name) {
 /**
  * 解析 M3U 文件为结构化数据
  */
+// 互联网直播分节标记（这些分节内的频道不做标准化）
+const SKIP_SECTION_START = /^#{4,}\s*互联网直播频道\s*#{4,}/;
+const SKIP_SECTION_END   = /^#{4,}\s*互联网直播频道end\s*#{4,}/i;
+
 function parseM3U(content) {
   const lines = content.split(/\r?\n/);
   const entries = [];
   let header = '';
   let currentInfo = null;
+  let inSkipSection = false;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -252,10 +258,24 @@ function parseM3U(content) {
       continue;
     }
 
+    // 检测分节边界
+    if (SKIP_SECTION_START.test(line)) {
+      inSkipSection = true;
+      entries.push({ comment: line });
+      currentInfo = null;
+      continue;
+    }
+    if (SKIP_SECTION_END.test(line)) {
+      inSkipSection = false;
+      entries.push({ comment: line });
+      currentInfo = null;
+      continue;
+    }
+
     if (line.startsWith('#EXTINF:')) {
       currentInfo = line;
     } else if (currentInfo && line.trim() && !line.startsWith('#')) {
-      entries.push({ info: currentInfo, url: line });
+      entries.push({ info: currentInfo, url: line, skipSection: inSkipSection });
       currentInfo = null;
     } else if (line.startsWith('##') || line.startsWith('#') && !line.startsWith('#EXTINF')) {
       // 注释行或分组标记，保留
@@ -305,6 +325,44 @@ function updateInfoLine(infoLine, updates) {
 }
 
 /**
+ * 重建 #EXTINF 行，保证属性顺序：tvg-id → tvg-name → tvg-logo → group-title
+ */
+function rebuildInfoLine(tvgId, tvgName, tvgLogo, groupTitle, displayName) {
+  return `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" tvg-logo="${tvgLogo}" group-title="${groupTitle}",${displayName}`;
+}
+
+/**
+ * Logo URL 生成：先去空格再 encodeURIComponent（避免 %20）
+ */
+function buildLogoUrl(name) {
+  return LOGO_BASE + encodeURIComponent(name.replace(/\s+/g, ''));
+}
+
+/**
+ * 根据 EPG 频道的 group/region 决定标准化后的 group-title
+ * 规则：
+ *   央视       → 央视频道
+ *   卫视       → 卫视频道
+ *   地方台+region → 北京频道/上海频道/山东频道 等
+ *   地方台无region → 地方频道
+ *   港澳台     → 港澳台
+ *   其他       → 其他频道
+ */
+function resolveGroupTitle(channel) {
+  const g = channel.group || '';
+  if (g === '央视') return '央视频道';
+  if (g === '卫视') return '卫视频道';
+  if (g === '地方台') return channel.region || '地方频道';
+  if (g === '港澳台') return '港澳台';
+  if (g === '卫星') return '其他频道';
+  if (g === '少儿') return '其他频道';
+  if (g === '数字付费') return '其他频道';
+  if (g === '海外') return '其他频道';
+  if (g === '海外体育') return '其他频道';
+  return '其他频道';
+}
+
+/**
  * 处理 M3U 文件
  * 返回处理后的内容和统计信息
  */
@@ -317,6 +375,12 @@ function processM3U(content, aliasIndex) {
 
   for (const entry of entries) {
     if (entry.comment !== undefined) {
+      processedEntries.push(entry);
+      continue;
+    }
+
+    // 互联网直播分节内的内容不做标准化，原样保留
+    if (entry.skipSection) {
       processedEntries.push(entry);
       continue;
     }
@@ -335,19 +399,22 @@ function processM3U(content, aliasIndex) {
 
     if (channel) {
       matched++;
-      // 构建标准化的 tvg-name（标准频道名 + 画质后缀）
-      const standardName = qualitySuffix ? channel.name + qualitySuffix : channel.name;
-      // tvg-id 只用基础频道名（不含画质标识）
-      const tvgId = channel.name;
-      // logo 基于完整 tvg-name 的拼音
-      const logoSlug = toPinyinSlug(standardName);
-      const logoUrl = LOGO_BASE + logoSlug;
+      // 构建标准化的 tvg-name
+      // 特判：channel.name 本身已含画质标识（如 CCTV-4K 超高清），不再附加 suffix
+      const nameAlreadyHasQuality = qualitySuffix &&
+        new RegExp(qualitySuffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(channel.name);
+      const standardName = (qualitySuffix && !nameAlreadyHasQuality)
+        ? channel.name + qualitySuffix
+        : channel.name;
+      // tvg-id 用 EPG 标准 id
+      const tvgId = channel.id;
+      // logo：先去空格再 encode（避免 %20）
+      const logo = buildLogoUrl(standardName);
+      // 标准化 group-title：取第一级，按 EPG group+region 重写
+      const groupTitle = resolveGroupTitle(channel);
 
-      const newInfo = updateInfoLine(entry.info, {
-        'tvg-id': tvgId,
-        'tvg-name': standardName,
-        'tvg-logo': logoUrl,
-      });
+      // 重建整行，保证属性顺序 tvg-id → tvg-name → tvg-logo → group-title
+      const newInfo = rebuildInfoLine(tvgId, standardName, logo, groupTitle, standardName);
       processedEntries.push({ ...entry, info: newInfo });
     } else {
       unmatched++;
