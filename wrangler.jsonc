@@ -9,7 +9,13 @@
 	"compatibility_date": "2025-10-03",
 	"observability": {
 		"enabled": true
-	}
+	},
+	/**
+	 * Service Bindings — 内部调用 EPG Worker，零延迟
+	 */
+	"services": [
+		{ "binding": "EPG_WORKER", "service": "laobaiepg" }
+	]
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

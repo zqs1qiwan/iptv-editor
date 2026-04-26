@@ -15,17 +15,29 @@ const CACHE_TTL = 3600 * 1000; // 1 小时
 
 /**
  * 获取频道列表，带内存缓存
+ * 优先通过 Service Binding 内部调用 EPG Worker（零延迟），fallback 到 HTTP fetch
  */
-async function getChannels() {
+async function getChannels(env) {
   const now = Date.now();
   if (cachedChannels && (now - cacheTime) < CACHE_TTL) {
     return { channels: cachedChannels, aliasIndex: cachedAliasIndex };
   }
-  const resp = await fetch(CHANNELS_API, {
-    headers: { 'User-Agent': 'iptv-editor/1.0' },
-  });
-  if (!resp.ok) throw new Error(`获取频道列表失败: ${resp.status}`);
-  const channels = await resp.json();
+
+  let channels;
+  if (env?.EPG_WORKER) {
+    // Service Binding：内部调用，零延迟、不走公网
+    const resp = await env.EPG_WORKER.fetch('https://laobaiepg.laobaitv.net/channels.json');
+    if (!resp.ok) throw new Error(`EPG Service Binding 调用失败: ${resp.status}`);
+    channels = await resp.json();
+  } else {
+    // Fallback：外部 HTTP fetch
+    const resp = await fetch(CHANNELS_API, {
+      headers: { 'User-Agent': 'iptv-editor/1.0' },
+    });
+    if (!resp.ok) throw new Error(`获取频道列表失败: ${resp.status}`);
+    channels = await resp.json();
+  }
+
   const aliasIndex = buildAliasIndex(channels);
   cachedChannels = channels;
   cachedAliasIndex = aliasIndex;
@@ -477,7 +489,7 @@ export default {
           return Response.json({ error: 'M3U 内容为空' }, { status: 400, headers: corsHeaders });
         }
 
-        const { aliasIndex } = await getChannels();
+        const { aliasIndex } = await getChannels(env);
         const result = processM3U(m3uContent, aliasIndex);
 
         return Response.json({
