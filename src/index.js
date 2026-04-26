@@ -420,7 +420,14 @@ function processM3U(content, aliasIndex) {
     } else {
       unmatched++;
       unmatchedList.push(nameToMatch);
-      processedEntries.push(entry);
+      // 匹配失败也做标准化：用显示名（去画质后缀）构建规范属性
+      const unmatchedName = baseName; // 去画质后缀的显示名
+      const unmatchedLogo = buildLogoUrl(unmatchedName);
+      // group-title：保留原有 group-title 第一级（分号前），不做 EPG 重写
+      const origGroupMatch = entry.info.match(/group-title="([^"]*)"/);
+      const origGroup = origGroupMatch ? origGroupMatch[1].split(';')[0].trim() : '';
+      const newInfo = rebuildInfoLine(unmatchedName, unmatchedName, unmatchedLogo, origGroup, displayName);
+      processedEntries.push({ ...entry, info: newInfo });
     }
   }
 
